@@ -1,4 +1,4 @@
-package nodeexporterreceiver
+package nodeexporter
 
 import (
 	"context"
