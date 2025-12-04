@@ -2,14 +2,14 @@ package nodeexporter
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"os"
 	"time"
 
+	"github.com/elek/otel-node-exporter/collector"
+	"github.com/elek/otel-node-exporter/kingpin"
 	"github.com/prometheus/client_golang/prometheus"
-	dto "github.com/prometheus/client_model/go"
-	"github.com/prometheus/node_exporter/collector"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.opentelemetry.io/collector/pdata/pcommon"
@@ -18,11 +18,11 @@ import (
 )
 
 type NodeExporterReceiver struct {
-	consumer   consumer.Metrics
-	cancel     context.CancelFunc
-	config     *Config
-	logger     *zap.Logger
-	collectors []collector.Collector
+	consumer consumer.Metrics
+	cancel   context.CancelFunc
+	config   *Config
+	logger   *zap.Logger
+	registry *prometheus.Registry
 }
 
 func (s *NodeExporterReceiver) Start(ctx context.Context, host component.Host) error {
@@ -30,12 +30,20 @@ func (s *NodeExporterReceiver) Start(ctx context.Context, host component.Host) e
 	ctx, s.cancel = context.WithCancel(ctx)
 
 	log := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	for key, value := range s.config.Flags {
+		kingpin.Set(key, value)
+	}
 
-	unameCollector, err := collector.NewUnameCollector(log)
+	collectors, err := collector.NewNodeCollector(log)
 	if err != nil {
 		s.logger.Error("failed to create uname collector", zap.Error(err))
 	}
-	s.collectors = append(s.collectors, unameCollector)
+	s.registry = prometheus.NewRegistry()
+
+	err = s.registry.Register(collectors)
+	if err != nil {
+		s.logger.Error("failed to register node collector", zap.Error(err))
+	}
 
 	interval, _ := time.ParseDuration(s.config.Interval)
 	go func() {
@@ -61,62 +69,67 @@ func (s *NodeExporterReceiver) Shutdown(ctx context.Context) error {
 }
 
 func (s *NodeExporterReceiver) refresh(ctx context.Context) {
-	for _, component := range s.collectors {
-		cname := fmt.Sprintf("%T", component)
-		s.logger.Info("Scraping metrics from component", zap.String("component", cname))
-		ch := make(chan prometheus.Metric)
-		go func() {
-			err := component.Update(ch)
-			if err != nil {
-				s.logger.Error("failed to scrape metrics", zap.Error(err))
+	dtos, err := s.registry.Gather()
+	if err != nil {
+		s.logger.Error("failed to gather metrics", zap.Error(err))
+	}
+	metrics := pmetric.NewMetrics()
+	metric := metrics.ResourceMetrics().AppendEmpty()
+	for _, dto := range dtos {
+		switch *dto.Type {
+		case io_prometheus_client.MetricType_GAUGE:
+			sm := metric.ScopeMetrics().AppendEmpty()
+			m := sm.Metrics().AppendEmpty()
+			m.SetName(*dto.Name)
+			if dto.Help != nil {
+				m.SetDescription(*dto.Help)
 			}
-			close(ch)
-		}()
 
-		metrics := pmetric.NewMetrics()
-		metric := metrics.ResourceMetrics().AppendEmpty()
-
-	processingloop:
-		for {
-
-			var dt dto.Metric
-			select {
-			case mtr, ok := <-ch:
-				if !ok {
-					break processingloop
+			for _, dtom := range dto.Metric {
+				gauge := m.SetEmptyGauge()
+				d := gauge.DataPoints().AppendEmpty()
+				if dtom.Gauge.Value != nil {
+					d.SetDoubleValue(*dtom.Gauge.Value)
 				}
-
-				err := mtr.Write(&dt)
-				if err != nil {
-					s.logger.Error("failed to write metrics", zap.Error(err))
-					continue
+				for _, lp := range dtom.Label {
+					d.Attributes().PutStr(lp.GetName(), lp.GetValue())
 				}
-
-				sm := metric.ScopeMetrics().AppendEmpty()
-				sm.Scope().SetName(cname)
-				m := sm.Metrics().AppendEmpty()
-
-				if dt.Gauge != nil {
-					gauge := m.SetEmptyGauge()
-					d := gauge.DataPoints().AppendEmpty()
-					if dt.Gauge.Value != nil {
-						d.SetIntValue(int64(*dt.Gauge.Value))
-					}
-					for _, lp := range dt.Label {
-						d.Attributes().PutStr(lp.GetName(), lp.GetValue())
-					}
-					if dt.TimestampMs != nil {
-						d.SetTimestamp(pcommon.NewTimestampFromTime(time.UnixMilli(*dt.TimestampMs)))
-					}
+				if dtom.TimestampMs == nil {
+					d.SetTimestamp(pcommon.NewTimestampFromTime(time.Now()))
+				} else {
+					d.SetTimestamp(pcommon.NewTimestampFromTime(time.UnixMilli(*dtom.TimestampMs)))
 				}
+			}
+		case io_prometheus_client.MetricType_COUNTER:
+			sm := metric.ScopeMetrics().AppendEmpty()
+			m := sm.Metrics().AppendEmpty()
+			m.SetName(*dto.Name)
+			if dto.Help != nil {
+				m.SetDescription(*dto.Help)
+			}
 
-			case <-ctx.Done():
-				break processingloop
+			for _, dtom := range dto.Metric {
+				counter := m.SetEmptySum()
+				counter.SetIsMonotonic(true)
+				counter.SetAggregationTemporality(pmetric.AggregationTemporalityCumulative)
+				d := counter.DataPoints().AppendEmpty()
+				if dtom.Counter.Value != nil {
+					d.SetDoubleValue(*dtom.Counter.Value)
+				}
+				for _, lp := range dtom.Label {
+					d.Attributes().PutStr(lp.GetName(), lp.GetValue())
+				}
+				if dtom.TimestampMs == nil {
+					d.SetTimestamp(pcommon.NewTimestampFromTime(time.Now()))
+				} else {
+					d.SetTimestamp(pcommon.NewTimestampFromTime(time.UnixMilli(*dtom.TimestampMs)))
+				}
 			}
 		}
-		err := s.consumer.ConsumeMetrics(ctx, metrics)
-		if err != nil {
-			s.logger.Error("Failed to consume metrics", zap.Error(err))
-		}
+
+	}
+	err = s.consumer.ConsumeMetrics(ctx, metrics)
+	if err != nil {
+		s.logger.Error("Failed to consume metrics", zap.Error(err))
 	}
 }

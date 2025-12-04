@@ -13,7 +13,8 @@ var (
 )
 
 type Config struct {
-	Interval string `mapstructure:"interval"`
+	Interval string            `mapstructure:"interval"`
+	Flags    map[string]string `mapstructure:"flags"`
 }
 
 func createDefaultConfig() component.Config {
