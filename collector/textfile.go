@@ -26,7 +26,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alecthomas/kingpin/v2"
+	"github.com/elek/otel-node-exporter/kingpin"
 	"github.com/prometheus/client_golang/prometheus"
 	dto "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"

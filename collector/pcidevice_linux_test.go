@@ -24,7 +24,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alecthomas/kingpin/v2"
+	"github.com/elek/otel-node-exporter/kingpin"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/testutil"
 )

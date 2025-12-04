@@ -19,7 +19,7 @@ package collector
 import (
 	"log/slog"
 
-	"github.com/alecthomas/kingpin/v2"
+	"github.com/elek/otel-node-exporter/kingpin"
 	"github.com/prometheus-community/go-runit/runit"
 	"github.com/prometheus/client_golang/prometheus"
 )

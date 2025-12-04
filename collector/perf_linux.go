@@ -23,7 +23,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/alecthomas/kingpin/v2"
+	"github.com/elek/otel-node-exporter/kingpin"
 	"github.com/hodgesds/perf-utils"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/sys/unix"

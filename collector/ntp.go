@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/alecthomas/kingpin/v2"
+	"github.com/elek/otel-node-exporter/kingpin"
 	"github.com/beevik/ntp"
 	"github.com/prometheus/client_golang/prometheus"
 )

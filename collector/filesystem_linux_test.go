@@ -21,7 +21,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/alecthomas/kingpin/v2"
+	"github.com/elek/otel-node-exporter/kingpin"
 
 	"github.com/prometheus/procfs"
 )

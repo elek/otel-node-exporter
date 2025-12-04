@@ -29,7 +29,7 @@ import (
 
 	"golang.org/x/exp/maps"
 
-	"github.com/alecthomas/kingpin/v2"
+	"github.com/elek/otel-node-exporter/kingpin"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/procfs"
 	"github.com/prometheus/procfs/sysfs"

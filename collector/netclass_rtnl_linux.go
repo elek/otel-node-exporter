@@ -22,7 +22,7 @@ import (
 	"io/fs"
 	"path/filepath"
 
-	"github.com/alecthomas/kingpin/v2"
+	"github.com/elek/otel-node-exporter/kingpin"
 	"github.com/jsimonetti/rtnetlink/v2"
 	"github.com/mdlayher/ethtool"
 	"github.com/prometheus/client_golang/prometheus"
