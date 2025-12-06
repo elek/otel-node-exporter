@@ -3,7 +3,6 @@ package nodeexporter
 import (
 	"context"
 	"log/slog"
-	"os"
 	"time"
 
 	"github.com/elek/otel-node-exporter/collector"
@@ -12,6 +11,7 @@ import (
 	"go.opentelemetry.io/collector/component"
 	"go.opentelemetry.io/collector/consumer"
 	"go.uber.org/zap"
+	"go.uber.org/zap/exp/zapslog"
 )
 
 type NodeExporterReceiver struct {
@@ -26,12 +26,13 @@ func (s *NodeExporterReceiver) Start(ctx context.Context, host component.Host) e
 	ctx = context.Background()
 	ctx, s.cancel = context.WithCancel(ctx)
 
-	log := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	sl := slog.New(zapslog.NewHandler(s.logger.Core()))
+
 	for key, value := range s.config.Flags {
 		kingpin.Set(key, value)
 	}
 
-	collectors, err := collector.NewNodeCollector(log)
+	collectors, err := collector.NewNodeCollector(sl)
 	if err != nil {
 		s.logger.Error("failed to create uname collector", zap.Error(err))
 	}
